@@ -1,0 +1,218 @@
+---
+title: "finalproject_movies"
+author: "Zubair Lalani, Saurav Sharma, David Moreno"
+date: "2024-12-11"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+TODO: The **introduction** section should relay what you are attempting to accomplish. It should provide enough background to your work such that a reader would not need this directions document to understand what you are doing. Basically, assume the reader is mostly familiar with the concepts from the course, but not this project. 
+
+# Methods
+In this section, we outline the steps taken to explore, prepare, and model the data using linear regression techniques. We begin by importing the dataset, examining its structure, and checking for data quality issues. 
+
+First, we load in the data and display some overall information about the dataset.
+```{r}
+imdb_data = read.csv("imdb.csv", header=TRUE)
+str(imdb_data)
+```
+
+For simplicity, we will remove rows containing any missing values as well as all rows which are corresponding to episodes of TV shows rather than films.
+```{r}
+imdb_data = na.omit(imdb_data)
+```
+```{r}
+imdb_data = subset(imdb_data, Rate != "No Rate")
+imdb_data = subset(imdb_data, Nudity != "No Rate")
+imdb_data = subset(imdb_data, Violence != "No Rate")
+imdb_data = subset(imdb_data, Profanity != "No Rate")
+imdb_data = subset(imdb_data, Alcohol != "No Rate")
+imdb_data = subset(imdb_data, Frightening != "No Rate")
+imdb_data = subset(imdb_data, Type == "Film")
+imdb_data = subset(imdb_data, select = -c(Episodes, Type)) # only considering films so episode count and type (series or film) not needed
+```
+Coerce variables to appropriate type. 
+```{r}
+imdb_data$Rate = as.numeric(imdb_data$Rate)
+imdb_data$Votes = as.numeric(gsub(",", "", imdb_data$Votes))
+#df$Genre = as.factor(df$Genre) # additional processing needed because multiple genres can be included separated by commas
+imdb_data$Duration = as.numeric(imdb_data$Duration)
+imdb_data$Certificate = as.factor(imdb_data$Certificate)
+imdb_data$Nudity = as.factor(imdb_data$Nudity)
+imdb_data$Violence = as.factor(imdb_data$Violence)
+imdb_data$Profanity = as.factor(imdb_data$Profanity)
+imdb_data$Frightening = as.factor(imdb_data$Frightening)
+```
+
+```{r}
+# TODO: for exploration, can remove from final report
+unique(imdb_data$Certificate)
+unique(imdb_data$Nudity)
+unique(imdb_data$Violence)
+unique(imdb_data$Profanity)
+unique(imdb_data$Frightening)
+```
+```{r}
+# TODO: for exploration, can remove from final report
+pairs(Rate ~ Duration + Votes + Date, data=imdb_data)
+```
+```{r}
+#imdb_data$Genre
+```
+The `Genre` variable in our dataset also needs some preprocessing because its provided as a comma separated list of genres (e.g. `"Adventure, Drama, Fantasy"`. We split the genres out, and create binary dummy variables for each unique genre.
+
+```{r}
+genres_list = strsplit(imdb_data$Genre, ", ")
+unique_genres = unique(unlist(genres_list))
+unique_genres
+```
+
+```{r}
+# sanitize; can't have "Sci-Fi", should instead be "Sci.Fi"
+# unique_genres = make.names(unique_genres)
+# colnames(imdb_data)[colnames(imdb_data) %in% unique_genres] = unique_genres
+
+#for (genre in unique_genres) {
+#  imdb_data[[genre]] = sapply(genres_list, function(genres) genre %in% genres)
+#}
+
+for (genre in unique_genres) {
+  imdb_data[[make.names(genre)]] = sapply(genres_list, function(genres) genre %in% genres)
+}
+
+#sci_fi_rows = imdb_data[imdb_data$Sci.Fi == 1, ]
+#sci_fi_rows
+```
+```{r}
+# remove original Genre column from dataset
+imdb_data = imdb_data[, !names(imdb_data) %in% "Genre"]
+names(imdb_data)
+```
+Next we fit a basic linear model with `Rate` as the response variable.
+```{r}
+# original intial_model
+#initial_model = lm(Rate ~ Duration + Certificate + Nudity + Violence + Profanity + Alcohol + Frightening, data=imdb_data)
+
+
+
+# initial_model with genres
+genre_terms = paste(make.names(unique_genres), collapse = " + ")
+formula = as.formula(paste("Rate ~ log(Votes) + Duration + Certificate + Nudity + Violence + Profanity + Alcohol + Frightening +", genre_terms))
+#initial_model = lm(formula, data = imdb_data)
+# CANNOT USE A FORMULA CREATED THIS WAY ^. Boxcox library will error out. 
+
+initial_model = lm(Rate ~ log(Votes) + Duration + Certificate + Nudity + Violence + Profanity + 
+              Alcohol + Frightening + Action + Adventure + Thriller + Crime + Drama + 
+              Sci.Fi + Comedy + History + Fantasy + Horror + Mystery + Animation + 
+              Family + Romance + Western + Musical + Biography + Music + War + 
+              Sport + Short + Film.Noir + Documentary, data = imdb_data)
+
+```
+
+We define a diagnostics helper function to easily determine if constraints are being satisfied. :
+```{r}
+diagnostics = function(model, pcol = "grey", lcol = "dodgerblue", alpha = 0.05, plotit = TRUE, testit = TRUE) {
+  output = list()
+  if (testit) {
+    shapiro_test = shapiro.test(residuals(model))
+    p_val = shapiro_test$p.value
+    decision = ifelse(p_val < alpha, "Reject", "Fail to Reject")
+    output$p_val = p_val
+    output$decision = decision
+  }
+  if (plotit) {
+    par(mfrow = c(1, 2))
+    plot(model$fitted.values, residuals(model),
+         col = pcol, pch = 19,
+         xlab = "Fitted", ylab = "Residuals",
+         main = "Residuals vs Fitted")
+    abline(h = 0, col = lcol, lwd=3)
+    qqnorm(residuals(model), col = pcol, pch = 19, main = "Normal Q-Q Plot")
+    qqline(residuals(model), col = lcol, lwd=3)
+  }
+  return(output)
+}
+```
+```{r}
+diagnostics_result = diagnostics(initial_model)
+diagnostics_result
+summary(initial_model)
+```
+
+The `Residuals vs Fitted` plot seems fine?
+
+The `Normal Q-Q` plot shows deviations from the diagonal line at tail end of the lower-quantiles. This indicates that the residuals are not perfectly normally distributed. 
+
+The Shapiro-Wilk test corroborates this finding, with a p-value of `r diagnostics_result$p_val`, leading to the rejection of the null hypothesis of normality.
+
+Given these results, we first try to remove any influential points which might be impacting the fit of our initial model.
+
+```{r}
+leverage = hatvalues(initial_model)
+cooks_distance = cooks.distance(initial_model)
+
+influential_points = which(cooks_distance > 4 / nrow(imdb_data))
+
+imdb_data_cleaned = imdb_data[-influential_points, ]
+model_without_influential_pts = lm(Rate ~  log(Votes) + Duration + Certificate + Nudity + Violence + Profanity + Alcohol + Frightening + Action + Adventure + Thriller + Crime + Drama + Sci.Fi + Comedy + History + Fantasy + Horror + Mystery + Animation + Family + Romance + Western + Musical + Biography + Music + War + Sport + Short + Film.Noir + Documentary, 
+                                   data = imdb_data_cleaned)
+summary(model_without_influential_pts)
+diagnostics(model_without_influential_pts)
+```
+This didn't really change the results, so let's try some transformations.
+
+GLM didn't help.
+```{r}
+glm_model = glm(formula, 
+                family = Gamma(link = "log"), data = imdb_data_cleaned)
+summary(glm_model)
+diagnostics(glm_model)
+```
+
+Box-cox: 
+```{r}
+library(MASS)
+
+any(imdb_data_cleaned$Rate <= 0) # no shift needed if non-positive values
+
+boxcox_result = boxcox(model_without_influential_pts, lambda = seq(-2, 2, by = 0.1))
+optimal_lambda = boxcox_result$x[which.max(boxcox_result$y)]
+optimal_lambda
+```
+Boxcox showed that the optimal delta = 2. 
+```{r}
+imdb_data_cleaned$Rate_transformed = (imdb_data_cleaned$Rate^2 - 1) / 2
+transformed_model = lm(Rate_transformed ~ log(Votes) + Duration + Certificate + Nudity + Violence + 
+                       Profanity + Alcohol + Frightening + Action + Adventure + Thriller + 
+                       Crime + Drama + Sci.Fi + Comedy + History + Fantasy + Horror + Mystery + 
+                       Animation + Family + Romance + Western + Musical + Biography + Music + 
+                       War + Sport + Short + Film.Noir + Documentary, 
+                       data = imdb_data_cleaned)
+summary(transformed_model)
+diagnostics(transformed_model)
+```
+
+<!-- Try log transformation. -->
+<!-- ```{R} -->
+<!-- imdb_data$Log_Votes = log(imdb_data$Votes + 1) -->
+<!-- model_updated = lm(Rate ~ Log_Votes + Genre + Duration + Certificate, data = imdb_data) -->
+<!-- diagnostics_output_updated = diagnostics(model_updated) -->
+<!-- diagnostics_output_updated -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- ``` -->
+<!-- Log didnt work. Exacerbates the issue in the Q-Q plot. Let's try a square root transformation: -->
+<!-- ```{r} -->
+<!-- transformed_model = lm(sqrt(Rate) ~ Duration + Certificate + Nudity + Violence + Profanity + Alcohol + Frightening, data = imdb_data) -->
+<!-- summary(transformed_model) -->
+<!-- diagnostics(transformed_model) -->
+<!-- ``` -->
+<!-- Try remove outliers: -->
+<!-- ```{r} -->
+<!-- ``` -->
+<!-- Box-cox transformation?: -->
+<!-- ```{r} -->
+<!-- ``` -->
