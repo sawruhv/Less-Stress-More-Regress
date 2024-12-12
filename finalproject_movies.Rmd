@@ -34,6 +34,21 @@ imdb_data = subset(imdb_data, Frightening != "No Rate")
 imdb_data = subset(imdb_data, Type == "Film")
 imdb_data = subset(imdb_data, select = -c(Episodes, Type)) # only considering films so episode count and type (series or film) not needed
 ```
+
+Now, we check for duplicate rows in the data
+
+```{r}
+sum(duplicated(imdb_data))
+```
+
+There seems to be a lot of duplicate films in this dataset which will have downstream impacts on our analysis so we will also remove all the duplicates.
+
+```{r}
+imdb_data <- imdb_data[!duplicated(imdb_data), ]
+nrow(imdb_data)
+```
+
+
 Coerce variables to appropriate type. 
 ```{r}
 imdb_data$Rate = as.numeric(imdb_data$Rate)
@@ -171,6 +186,20 @@ glm_model = glm(formula,
 summary(glm_model)
 diagnostics(glm_model)
 ```
+Sqrt transformation didn't help either.
+
+```{r}
+imdb_data_cleaned$Rate_transformed = sqrt(imdb_data_cleaned$Rate)
+transformed_model = lm(Rate_transformed ~ log(Votes) + Duration + Certificate + Nudity + Violence + 
+                       Profanity + Alcohol + Frightening + Action + Adventure + Thriller + 
+                       Crime + Drama + Sci.Fi + Comedy + History + Fantasy + Horror + Mystery + 
+                       Animation + Family + Romance + Western + Musical + Biography + Music + 
+                       War + Sport + Short + Film.Noir + Documentary, 
+                       data = imdb_data_cleaned)
+summary(transformed_model)
+diagnostics(transformed_model)
+```
+
 
 Box-cox: 
 ```{r}
@@ -194,6 +223,34 @@ transformed_model = lm(Rate_transformed ~ log(Votes) + Duration + Certificate + 
 summary(transformed_model)
 diagnostics(transformed_model)
 ```
+
+Now we check to see if there are any multi-collinearity issues by calculating the variance inflation factors for the predictors.
+
+```{r}
+car::vif(transformed_model)
+```
+
+The only extreme value seems to be "Certificate". 
+
+TODO: deal with this later since from my understanding collinearity affects interpretation and inference more than prediction.
+
+```{r}
+interaction_mdl = lm(Rate_transformed ~ log(Votes) + Duration + Certificate + Nudity + Violence + 
+                       Profanity + Alcohol + Frightening + Action + Adventure + Thriller + 
+                       Crime + Drama + Sci.Fi + Comedy + History + Fantasy + Horror + Mystery + 
+                       Animation + Family + Romance + Western + Musical + Biography + Music + 
+                       War + Sport + Short + Film.Noir + Documentary + Certificate:Frightening + Horror:Frightening + Alcohol:Profanity:Nudity, 
+                       data = imdb_data_cleaned)
+summary(interaction_mdl)
+diagnostics(interaction_mdl)
+```
+```{r}
+step_mdl = step(full_mdl, direction = "backward")
+summary(step_mdl)
+diagnostics(step_mdl)
+```
+
+
 
 <!-- Try log transformation. -->
 <!-- ```{R} -->
