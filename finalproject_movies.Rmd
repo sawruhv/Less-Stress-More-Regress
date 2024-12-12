@@ -6,54 +6,57 @@ output: html_document
 ---
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
 ```
 
 # Introduction
-TODO: The **introduction** section should relay what you are attempting to accomplish. It should provide enough background to your work such that a reader would not need this directions document to understand what you are doing. Basically, assume the reader is mostly familiar with the concepts from the course, but not this project. 
+In today’s world, films span a wide range of genres, ratings, and certifications, and online platforms like IMDb serve as a hub where viewers rate and discuss these titles. Understanding what features might influence a film’s rating can be valuable for researchers, the film industry, and enthusiasts alike. Are movies with certain content advisories (such as strong violence or profanity) associated with higher or lower viewer ratings? Does the level of audience engagement, as measured by the number of votes cast, correlate with the final rating a film receives? Furthermore, how might genre or other attributes help us model and predict a film’s average IMDb rating?
+
+To explore these questions, we will analyze a dataset derived from IMDb listings. This dataset includes films along with their IMDb ratings, number of votes, runtime, certification rating, and several qualitative content advisories (e.g., for nudity, violence, profanity, alcohol use, and frightening elements). It also includes genre information, which is provided as multiple genres associated with each title. Our goal is to build a regression model that helps explain and predict the IMDb rating of a film based on these characteristics.
+
+We obtained the data from an IMDb dataset that compiles various features of films and television episodes. For this project, we focus only on feature films and exclude television episodes to ensure a more uniform set of observations. After data cleaning and preprocessing, we will examine relationships between IMDb rating and predictors like the number of votes, content advisories, duration, certification rating, and the presence or absence of certain genres. Since IMDb ratings are widely recognized by both casual viewers and industry professionals, a model that can successfully characterize these ratings may provide insights into patterns behind audience reception. The final aim is not to arrive at a single “correct” model, but rather to use the tools from our regression analysis toolkit—such as transformations, dummy variables, residual diagnostics, and model selection—to develop a model that fits the data well, checks standard regression assumptions, and ultimately offers meaningful interpretation in the context of film rating prediction.
 
 # Methods
-In this section, we outline the steps taken to explore, prepare, and model the data using linear regression techniques. We begin by importing the dataset, examining its structure, and checking for data quality issues. 
+To create a suitable predictive model, we followed a systematic approach that involved data preparation, exploratory analysis, and iterative model fitting. We began by loading the dataset (imdb.csv) and performing initial checks on its structure and contents. 
 
-First, we load in the data and display some overall information about the dataset.
 ```{r}
 imdb_data = read.csv("imdb.csv", header=TRUE)
 str(imdb_data)
 ```
 
-For simplicity, we will remove rows containing any missing values as well as all rows which are corresponding to episodes of TV shows rather than films.
+The original dataset included various observations of films and television episodes, along with attributes such as IMDb rating, number of votes, genre listing, and content advisories. Our first task was to ensure data quality, which include:
+
+## Filtering and Cleaning
+
+We removed rows with missing values to maintain the integrity of our analysis.
+
 ```{r}
 imdb_data = na.omit(imdb_data)
-```
-```{r}
+
 imdb_data = subset(imdb_data, Rate != "No Rate")
 imdb_data = subset(imdb_data, Nudity != "No Rate")
 imdb_data = subset(imdb_data, Violence != "No Rate")
 imdb_data = subset(imdb_data, Profanity != "No Rate")
 imdb_data = subset(imdb_data, Alcohol != "No Rate")
 imdb_data = subset(imdb_data, Frightening != "No Rate")
+```
+
+We excluded television episodes and focused solely on feature films, removing any variables (such as episode count and type indicators) that were no longer relevant.
+
+```{r}
 imdb_data = subset(imdb_data, Type == "Film")
 imdb_data = subset(imdb_data, select = -c(Episodes, Type)) # only considering films so episode count and type (series or film) not needed
 ```
 
-Now, we check for duplicate rows in the data
+We addressed duplicates in the data, retaining only unique films to avoid skewing results with repeated entries.
 
 ```{r}
-sum(duplicated(imdb_data))
+imdb_data = imdb_data[!duplicated(imdb_data), ]
 ```
-
-There seems to be a lot of duplicate films in this dataset which will have downstream impacts on our analysis so we will also remove all the duplicates.
-
-```{r}
-imdb_data <- imdb_data[!duplicated(imdb_data), ]
-nrow(imdb_data)
-```
-
-
-Coerce variables to appropriate type. 
+We also converted variables to appropriate data types. For example, the ratings and votes were coerced into numeric form, while certifications and advisories were treated as factors.
 ```{r}
 imdb_data$Rate = as.numeric(imdb_data$Rate)
 imdb_data$Votes = as.numeric(gsub(",", "", imdb_data$Votes))
-#df$Genre = as.factor(df$Genre) # additional processing needed because multiple genres can be included separated by commas
 imdb_data$Duration = as.numeric(imdb_data$Duration)
 imdb_data$Certificate = as.factor(imdb_data$Certificate)
 imdb_data$Nudity = as.factor(imdb_data$Nudity)
@@ -61,59 +64,28 @@ imdb_data$Violence = as.factor(imdb_data$Violence)
 imdb_data$Profanity = as.factor(imdb_data$Profanity)
 imdb_data$Frightening = as.factor(imdb_data$Frightening)
 ```
+## Data Transformation and Feature Engineering 
 
-```{r}
-# TODO: for exploration, can remove from final report
-unique(imdb_data$Certificate)
-unique(imdb_data$Nudity)
-unique(imdb_data$Violence)
-unique(imdb_data$Profanity)
-unique(imdb_data$Frightening)
-```
-```{r}
-# TODO: for exploration, can remove from final report
-pairs(Rate ~ Duration + Votes + Date, data=imdb_data)
-```
-```{r}
-#imdb_data$Genre
-```
-The `Genre` variable in our dataset also needs some preprocessing because its provided as a comma separated list of genres (e.g. `"Adventure, Drama, Fantasy"`. We split the genres out, and create binary dummy variables for each unique genre.
+The Genre variable was provided as a comma-separated string (e.g., "Adventure, Drama, Fantasy"). To include genre information in a regression framework, we transformed this categorical data into multiple binary (dummy) variables, one for each unique genre.
 
 ```{r}
 genres_list = strsplit(imdb_data$Genre, ", ")
 unique_genres = unique(unlist(genres_list))
-unique_genres
-```
 
-```{r}
-# sanitize; can't have "Sci-Fi", should instead be "Sci.Fi"
-# unique_genres = make.names(unique_genres)
-# colnames(imdb_data)[colnames(imdb_data) %in% unique_genres] = unique_genres
-
-#for (genre in unique_genres) {
-#  imdb_data[[genre]] = sapply(genres_list, function(genres) genre %in% genres)
-#}
-
+# also need to sanitize; can't have "Sci-Fi", should instead be "Sci.Fi"
 for (genre in unique_genres) {
   imdb_data[[make.names(genre)]] = sapply(genres_list, function(genres) genre %in% genres)
 }
 
-#sci_fi_rows = imdb_data[imdb_data$Sci.Fi == 1, ]
-#sci_fi_rows
-```
-```{r}
 # remove original Genre column from dataset
 imdb_data = imdb_data[, !names(imdb_data) %in% "Genre"]
-names(imdb_data)
 ```
-Next we fit a basic linear model with `Rate` as the response variable.
+
+## Model Construction and Refinement
+
+We started with a multiple linear regression model that included key predictors such as duration, log-transformed votes, certification rating, and binary variables for each content advisory category (nudity, violence, profanity, alcohol, frightening elements). We incorporated all genre dummies into the model to capture the effect of various film types (e.g., Action, Drama, Comedy) on ratings. 
+
 ```{r}
-# original intial_model
-#initial_model = lm(Rate ~ Duration + Certificate + Nudity + Violence + Profanity + Alcohol + Frightening, data=imdb_data)
-
-
-
-# initial_model with genres
 genre_terms = paste(make.names(unique_genres), collapse = " + ")
 formula = as.formula(paste("Rate ~ log(Votes) + Duration + Certificate + Nudity + Violence + Profanity + Alcohol + Frightening +", genre_terms))
 #initial_model = lm(formula, data = imdb_data)
@@ -124,10 +96,9 @@ initial_model = lm(Rate ~ log(Votes) + Duration + Certificate + Nudity + Violenc
               Sci.Fi + Comedy + History + Fantasy + Horror + Mystery + Animation + 
               Family + Romance + Western + Musical + Biography + Music + War + 
               Sport + Short + Film.Noir + Documentary, data = imdb_data)
-
 ```
 
-We define a diagnostics helper function to easily determine if constraints are being satisfied. :
+We defined a diagnostics helper function to easily determine if constraints are being satisfied. 
 ```{r}
 diagnostics = function(model, pcol = "grey", lcol = "dodgerblue", alpha = 0.05, plotit = TRUE, testit = TRUE) {
   output = list()
@@ -157,13 +128,11 @@ diagnostics_result
 summary(initial_model)
 ```
 
-The `Residuals vs Fitted` plot seems fine?
-
-The `Normal Q-Q` plot shows deviations from the diagonal line at tail end of the lower-quantiles. This indicates that the residuals are not perfectly normally distributed. 
+The diagnostics for our intial model were lukewarm. The `Normal Q-Q` plot showed deviations from the diagonal line at tail end of the lower-quantiles. This indicated that the residuals are not perfectly normally distributed. 
 
 The Shapiro-Wilk test corroborates this finding, with a p-value of `r diagnostics_result$p_val`, leading to the rejection of the null hypothesis of normality.
 
-Given these results, we first try to remove any influential points which might be impacting the fit of our initial model.
+Given these results, we aimed to iteratively refine our model first by removing any influential points which might have impacted the fit of our initial model.
 
 ```{r}
 leverage = hatvalues(initial_model)
@@ -172,36 +141,14 @@ cooks_distance = cooks.distance(initial_model)
 influential_points = which(cooks_distance > 4 / nrow(imdb_data))
 
 imdb_data_cleaned = imdb_data[-influential_points, ]
-model_without_influential_pts = lm(Rate ~  log(Votes) + Duration + Certificate + Nudity + Violence + Profanity + Alcohol + Frightening + Action + Adventure + Thriller + Crime + Drama + Sci.Fi + Comedy + History + Fantasy + Horror + Mystery + Animation + Family + Romance + Western + Musical + Biography + Music + War + Sport + Short + Film.Noir + Documentary, 
+model_without_influential_pts = lm(Rate ~ log(Votes) + Duration + Certificate + Nudity + Violence + Profanity + Alcohol + Frightening + Action + Adventure + Thriller + Crime + Drama + Sci.Fi + Comedy + History + Fantasy + Horror + Mystery + Animation + Family + Romance + Western + Musical + Biography + Music + War + Sport + Short + Film.Noir + Documentary, 
                                    data = imdb_data_cleaned)
 summary(model_without_influential_pts)
 diagnostics(model_without_influential_pts)
 ```
-This didn't really change the results, so let's try some transformations.
 
-GLM didn't help.
-```{r}
-glm_model = glm(formula, 
-                family = Gamma(link = "log"), data = imdb_data_cleaned)
-summary(glm_model)
-diagnostics(glm_model)
-```
-Sqrt transformation didn't help either.
+We evaluated transformations of the response to improve normality of residuals and better meet linear regression assumptions. Ultimately, we found Box-cox transformation of our response variable to improve our model in these regards.
 
-```{r}
-imdb_data_cleaned$Rate_transformed = sqrt(imdb_data_cleaned$Rate)
-transformed_model = lm(Rate_transformed ~ log(Votes) + Duration + Certificate + Nudity + Violence + 
-                       Profanity + Alcohol + Frightening + Action + Adventure + Thriller + 
-                       Crime + Drama + Sci.Fi + Comedy + History + Fantasy + Horror + Mystery + 
-                       Animation + Family + Romance + Western + Musical + Biography + Music + 
-                       War + Sport + Short + Film.Noir + Documentary, 
-                       data = imdb_data_cleaned)
-summary(transformed_model)
-diagnostics(transformed_model)
-```
-
-
-Box-cox: 
 ```{r}
 library(MASS)
 
@@ -209,13 +156,10 @@ any(imdb_data_cleaned$Rate <= 0) # no shift needed if non-positive values
 
 boxcox_result = boxcox(model_without_influential_pts, lambda = seq(-2, 2, by = 0.1))
 optimal_lambda = boxcox_result$x[which.max(boxcox_result$y)]
-optimal_lambda
-```
-Boxcox showed that the optimal delta = 2. 
-```{r}
-imdb_data_cleaned$Rate_transformed = (imdb_data_cleaned$Rate^2 - 1) / 2
-transformed_model = lm(Rate_transformed ~ log(Votes) + Duration + Certificate + Nudity + Violence + 
-                       Profanity + Alcohol + Frightening + Action + Adventure + Thriller + 
+imdb_data_cleaned$Rate_transformed = (imdb_data_cleaned$Rate^optimal_lambda - 1) / optimal_lambda
+
+transformed_model = lm(Rate_transformed ~ log(Votes) + Duration + Certificate + Nudity + Violence
+                       + Profanity + Alcohol + Frightening + Action + Adventure + Thriller + 
                        Crime + Drama + Sci.Fi + Comedy + History + Fantasy + Horror + Mystery + 
                        Animation + Family + Romance + Western + Musical + Biography + Music + 
                        War + Sport + Short + Film.Noir + Documentary, 
@@ -224,15 +168,11 @@ summary(transformed_model)
 diagnostics(transformed_model)
 ```
 
-Now we check to see if there are any multi-collinearity issues by calculating the variance inflation factors for the predictors.
+As a final step, we reviewed variance inflation factors (VIFs) to check for multicollinearity issues and considered interaction terms where conceptually meaningful (e.g., between certain advisory categories and film genres).
 
 ```{r}
 car::vif(transformed_model)
 ```
-
-The only extreme value seems to be "Certificate". 
-
-TODO: deal with this later since from my understanding collinearity affects interpretation and inference more than prediction.
 
 ```{r}
 interaction_mdl = lm(Rate_transformed ~ log(Votes) + Duration + Certificate + Nudity + Violence + 
@@ -244,32 +184,19 @@ interaction_mdl = lm(Rate_transformed ~ log(Votes) + Duration + Certificate + Nu
 summary(interaction_mdl)
 diagnostics(interaction_mdl)
 ```
+
 ```{r}
-step_mdl = step(full_mdl, direction = "backward")
+step_mdl = step(interaction_mdl, direction = "both")
 summary(step_mdl)
 diagnostics(step_mdl)
 ```
 
+Throughout this process, we documented each step of the analysis. We emphasize that our approach is not about applying every possible method, but rather about using appropriate methods to arrive at a well-justified final model that addresses a meaningful question: How well can we predict and explain a film’s IMDb rating using its measurable attributes?
 
+# Results
 
-<!-- Try log transformation. -->
-<!-- ```{R} -->
-<!-- imdb_data$Log_Votes = log(imdb_data$Votes + 1) -->
-<!-- model_updated = lm(Rate ~ Log_Votes + Genre + Duration + Certificate, data = imdb_data) -->
-<!-- diagnostics_output_updated = diagnostics(model_updated) -->
-<!-- diagnostics_output_updated -->
-<!-- ``` -->
-<!-- ```{r} -->
-<!-- ``` -->
-<!-- Log didnt work. Exacerbates the issue in the Q-Q plot. Let's try a square root transformation: -->
-<!-- ```{r} -->
-<!-- transformed_model = lm(sqrt(Rate) ~ Duration + Certificate + Nudity + Violence + Profanity + Alcohol + Frightening, data = imdb_data) -->
-<!-- summary(transformed_model) -->
-<!-- diagnostics(transformed_model) -->
-<!-- ``` -->
-<!-- Try remove outliers: -->
-<!-- ```{r} -->
-<!-- ``` -->
-<!-- Box-cox transformation?: -->
-<!-- ```{r} -->
-<!-- ``` -->
+WIP
+
+# Discussion
+
+WIP
