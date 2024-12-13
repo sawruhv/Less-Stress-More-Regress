@@ -193,6 +193,44 @@ diagnostics(step_mdl)
 
 Throughout this process, we documented each step of the analysis. We emphasize that our approach is not about applying every possible method, but rather about using appropriate methods to arrive at a well-justified final model that addresses a meaningful question: How well can we predict and explain a film’s IMDb rating using its measurable attributes?
 
+Train-Test Split and RMSE:
+Splitting the data into training and test sets. Fits a linear regression model with various predictors and interaction terms.
+evaluates the model using diagnostics and performance metrics. Model did not improve.
+
+```{R}
+set.seed(391993)
+
+train_index = sample(seq_len(nrow(imdb_data_cleaned)), size = 0.9 * nrow(imdb_data_cleaned))
+
+train_data = imdb_data_cleaned[train_index, ]
+test_data = imdb_data_cleaned[-train_index, ]
+
+cat("Training set rows:", nrow(train_data), "\n")
+cat("Test set rows:", nrow(test_data), "\n")
+
+```
+
+
+```{R}
+model_without_influential_pts = lm(Rate ~ log1p(Votes) + Duration + Certificate + Nudity + Violence +
+                                   Profanity + Alcohol + Frightening + Action + Adventure +
+                                   Thriller + Crime + Drama + Sci.Fi + Comedy + History +
+                                   Fantasy + Horror + Mystery + Animation + Family +
+                                   Romance + Western + Musical + Biography + Music +
+                                   War + Sport + Short + Film.Noir + Documentary + Certificate:Frightening + Horror:Frightening + Alcohol:Profanity:Nudity,
+                                   data = imdb_data_cleaned)
+
+summary(model_without_influential_pts)
+
+diagnostics(model_without_influential_pts)
+
+predictions = predict(model_without_influential_pts, newdata = test_data)
+
+rmse = sqrt(mean((test_data$Rate - predictions)^2))
+print(paste("RMSE:", rmse))
+
+```
+
 # Results
 
 WIP
