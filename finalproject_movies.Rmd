@@ -2,7 +2,9 @@
 title: "finalproject_movies"
 author: "Zubair Lalani, Saurav Sharma, David Moreno"
 date: "2024-12-11"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -300,7 +302,7 @@ train_index = sample(seq_len(nrow(imdb_data_cleaned)), size = 0.9 * nrow(imdb_da
 train_data = imdb_data_cleaned[train_index, ]
 test_data = imdb_data_cleaned[-train_index, ]
 
-# intial model trained, make sure to have the data only be pointing to train_data
+# initial model trained, make sure to have the data only be pointing to train_data
 trained_intial_model = initial_model;
 # "final" model trained
 trained_final_model = step_reduced_model
@@ -318,12 +320,6 @@ rmse_value_final_model = sqrt(mean((expected - predictions_final)^2))
 The RMSE of our initial model was `r rmse_value_initial_model`, whereas the RMSE value of our final model is `r rmse_value_final_model` which demonstrates the improvement we achieved over the course of our investigation.
 
 # Discussion
-
-veni, vedi, not necessarily vici
-
-We 
-1. cleaned
-2. feature engineered
-3. tried various approaches to build a model, transform the model to have better fit
-
-SCURTINIZE our results based from a diagnostic points, but draw attention to the fact that our exploration and iteration did improve our diagnostics.
+Our project was aimed to explore the influence in IMDb ratings of films using the dataset. various factors in this study like predictors, votes, genre, and content. 
+We worked on an iterative approach to develop several regression models to predict IMDB ratings.Our process was data cleaning, defining features, and the different statistical method.
+With our iterative trails, we were able to refine our model model to achieve a substantial improvement from our initial model, we got the RMSE to reduce from 17.15 to 4.15. Our process showed how important it was to use transformer, the interaction terms, and model selection for regression analysis. We did not get a "perfect" model, but working to get a better result for analysis was beneficial for us to find what else is helpful. More studies can expand from our work by using other predictors and exploring other frameworks.
