@@ -1,5 +1,5 @@
 ---
-title: "finalproject_movies"
+title: "Regressing IMDB Ratings"
 author: "Zubair Lalani, Saurav Sharma, David Moreno"
 date: "2024-12-11"
 output:
