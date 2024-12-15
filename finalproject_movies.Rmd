@@ -281,7 +281,7 @@ step_reduced_model_diagnostics = diagnostics(step_reduced_model)
 
 TODO: Not sure which model to pick as our final model because it seems box-cox technical performs best at ~0.57, whereas the removing collinearity and adding interactions terms both perform at ~0.56. I've written the text below assuming that we are picking the stepwise selection model, but not sure if that's the right decision or not.
 
-Based on the results above, we ultimately landed on our model that used backward selection as it had the best adjusted R Squared value, least number of predictors, while also having the best diagnostic plots. Below, we have displayed the formula for our final regression model.
+Based on the results above, we ultimately landed on our model that used backward selection as it had a good adjusted R Squared value, least number of predictors, while also having the best diagnostic plots. Below, we have displayed the formula for our final regression model.
 
 ```{r}
 summary(step_reduced_model)$call
