@@ -3,8 +3,8 @@ title: "finalproject_movies"
 author: "Zubair Lalani, Saurav Sharma, David Moreno"
 date: "2024-12-11"
 output:
-  pdf_document: default
   html_document: default
+  pdf_document: default
 ---
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -227,7 +227,7 @@ Below you can find an assessment of the models we tried. The order of each secti
 
 ## Initial additive model
 
-Adjusted R-Square: `r summary(initial_model)$adj.r.squared`
+*Adjusted R-Square:* `r summary(initial_model)$adj.r.squared`
 
 ```{r}
 initial_model_diagnostics = diagnostics(initial_model)
@@ -236,7 +236,7 @@ initial_model_diagnostics = diagnostics(initial_model)
 
 ## Additive Model Results
 
-Adjusted R-Square: `r summary(additive_model)$adj.r.squared`
+*Adjusted R-Square:* `r summary(additive_model)$adj.r.squared`
 
 ```{r}
 additive_model_diagnostics = diagnostics(additive_model)
@@ -244,7 +244,7 @@ additive_model_diagnostics = diagnostics(additive_model)
 
 ## Model without influential points
 
-Adjusted R-Square: `r summary(model_without_influential_pts)$adj.r.squared`
+*Adjusted R-Square:* `r summary(model_without_influential_pts)$adj.r.squared`
 
 ```{r}
 model_without_influential_diagnostics = diagnostics(model_without_influential_pts)
@@ -253,7 +253,7 @@ model_without_influential_diagnostics = diagnostics(model_without_influential_pt
 
 ## Model with Box-Cox transformation applied
 
-Adjusted R-Square: `r summary(boxcox_transformed_model)$adj.r.squared`
+*Adjusted R-Square:* `r summary(boxcox_transformed_model)$adj.r.squared`
 
 ```{r}
 box_cox_mdl_diagnostics = diagnostics(boxcox_transformed_model)
@@ -262,7 +262,7 @@ box_cox_mdl_diagnostics = diagnostics(boxcox_transformed_model)
 
 ## Interaction Model (and remove variables to fix collinearity issues)
 
-Adjusted R-Square: `r summary(interaction_model)$adj.r.squared`
+*Adjusted R-Square:* `r summary(interaction_model)$adj.r.squared`
 
 ```{r}
 interaction_model_diagnostics = diagnostics(interaction_model)
@@ -271,17 +271,14 @@ interaction_model_diagnostics = diagnostics(interaction_model)
 
 ## Backward stepwise selection model
 
-Adjusted R-Square: `r summary(step_reduced_model)$adj.r.squared`
+*Adjusted R-Square:* `r summary(step_reduced_model)$adj.r.squared`
 
 ```{r}
 step_reduced_model_diagnostics = diagnostics(step_reduced_model)
 ```
 
 
-
 ## Selecting a model
-
-TODO: Not sure which model to pick as our final model because it seems box-cox technical performs best at ~0.57, whereas the removing collinearity and adding interactions terms both perform at ~0.56. I've written the text below assuming that we are picking the stepwise selection model, but not sure if that's the right decision or not.
 
 Based on the results above, we ultimately landed on our model that used backward selection as it had a good adjusted R Squared value, least number of predictors, while also having the best diagnostic plots. Below, we have displayed the formula for our final regression model.
 
@@ -294,32 +291,46 @@ This isn't a perfect model, but we feel reasonably confident that this model pro
 To illustrate this, we compare our prediction ability from our starting model to the final model we chose.
 
 
-```{R}
+```{r echo = TRUE, results='hide'}
 set.seed(391993)
 
 # split data
-train_index = sample(seq_len(nrow(imdb_data_cleaned)), size = 0.9 * nrow(imdb_data_cleaned))
+train_index = sample(seq_len(nrow(imdb_data_cleaned)), size = 0.85 * nrow(imdb_data_cleaned))
 train_data = imdb_data_cleaned[train_index, ]
 test_data = imdb_data_cleaned[-train_index, ]
 
-# initial model trained, make sure to have the data only be pointing to train_data
-trained_intial_model = initial_model;
-# "final" model trained
-trained_final_model = step_reduced_model
+# Retraining models in question using only train_data to prevent data leakage.
+trained_initial_model = lm(Rate ~ Duration + Certificate + Nudity + Violence + Profanity + 
+              Alcohol + Frightening + Action + Adventure + Thriller + Crime + Drama + 
+              Sci.Fi + Comedy + History + Fantasy + Horror + Mystery + Animation + 
+              Family + Romance + Western + Musical + Biography + Music + War + 
+              Sport + Short + Film.Noir + Documentary, data = train_data)
+
+trained_semifinal_model = lm(Rate_transformed ~ log(Votes) + Date + Duration + (Nudity + Violence + Profanity + Alcohol)^2 + Frightening:Horror + Action + Adventure + Thriller + 
+                       Crime + Drama + Sci.Fi + Comedy + Fantasy + Horror + Mystery + 
+                       Animation + Family + Romance + Western + Musical + Biography + Music + 
+                       War + Sport + Short + Film.Noir + Documentary, 
+                       data = train_data)
+trained_final_model = step(trained_semifinal_model, direction = "backward")
 
 # predict for both
-predictions_initial = predict(trained_intial_model, newdata=test_data)
+predictions_initial = predict(trained_initial_model, newdata=test_data)
 predictions_final = predict(trained_final_model, newdata=test_data)
 
 # compare RMSEs
 expected = test_data$Rate_transformed
 rmse_value_initial_model = sqrt(mean((expected - predictions_initial)^2))
 rmse_value_final_model = sqrt(mean((expected - predictions_final)^2))
+
+rmse_value_initial_model
+rmse_value_final_model
 ```
 
 The RMSE of our initial model was `r rmse_value_initial_model`, whereas the RMSE value of our final model is `r rmse_value_final_model` which demonstrates the improvement we achieved over the course of our investigation.
 
 # Discussion
-Our project was aimed to explore the influence in IMDb ratings of films using the dataset. various factors in this study like predictors, votes, genre, and content. 
-We worked on an iterative approach to develop several regression models to predict IMDB ratings.Our process was data cleaning, defining features, and the different statistical method.
-With our iterative trails, we were able to refine our model model to achieve a substantial improvement from our initial model, we got the RMSE to reduce from 17.15 to 4.15. Our process showed how important it was to use transformer, the interaction terms, and model selection for regression analysis. We did not get a "perfect" model, but working to get a better result for analysis was beneficial for us to find what else is helpful. More studies can expand from our work by using other predictors and exploring other frameworks.
+This project aimed to explore how various factors influence IMDb film ratings. We examined predictors such as the number of votes, genre, and content-related advisories, applying a series of transformations, interactions, and model selection techniques to refine our regression models.
+
+Our analysis followed an iterative approach that began with data cleaning and feature engineering, then progressed through multiple modeling attempts. Each iteration allowed us to identify and incorporate improvements - such as transformations of the response variable, inclusion of interaction terms, and careful model selection - that led to substantial gains in predictive accuracy. Specifically, we reduced the root mean squared error (RMSE) from an initial value of 17.15 down to 4.15.
+
+While we did not achieve a “perfect” model, the process itself was instructive. It highlighted the importance of thoughtful data preparation, careful assumption checks, and iterative refinement for regression analysis. Future work could build on these findings by introducing additional predictors or experimenting with alternative modeling frameworks.
