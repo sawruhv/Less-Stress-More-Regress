@@ -86,15 +86,28 @@ imdb_data = imdb_data[, !names(imdb_data) %in% "Genre"]
 
 ## Model Construction and Refinement
 
-We started with a multiple linear regression model that included key predictors such as duration, log-transformed votes, certification rating, and binary variables for each content advisory category (nudity, violence, profanity, alcohol, frightening elements). We incorporated all genre dummies into the model to capture the effect of various film types (e.g., Action, Drama, Comedy) on ratings. 
+We started with a multiple linear regression model that included predictors determined through playing around with scatter plots, as well as using our intuition. The predictors include duration, certification rating (PG-13, R, etc), and binary variables for each content advisory category (nudity, violence, profanity, alcohol, frightening elements). We incorporated all genre dummies into the model to capture the effect of various film types (e.g., Action, Drama, Comedy) on ratings.
+
 
 ```{r}
+set.seed(1234)
+initial_model = lm(Rate ~ Duration + Certificate + Nudity + Violence + Profanity + 
+              Alcohol + Frightening + Action + Adventure + Thriller + Crime + Drama + 
+              Sci.Fi + Comedy + History + Fantasy + Horror + Mystery + Animation + 
+              Family + Romance + Western + Musical + Biography + Music + War + 
+              Sport + Short + Film.Noir + Documentary, data = imdb_data)
+```
+
+As expected, the results of our initial model were rather poor (see "Results" section for more details). Therefore, after doing some investigation, we decided to include 2 more predictors that we believe would improve the model. These predictors were "Votes" and "Date". We applied a log transformation to "Votes" because it had a large range.
+
+```{r}
+set.seed(1234)
 genre_terms = paste(make.names(unique_genres), collapse = " + ")
 formula = as.formula(paste("Rate ~ log(Votes) + Date + Duration + Certificate + Nudity + Violence + Profanity + Alcohol + Frightening +", genre_terms))
 #initial_model = lm(formula, data = imdb_data)
 # CANNOT USE A FORMULA CREATED THIS WAY ^. Boxcox library will error out. 
 
-initial_model = lm(Rate ~ log(Votes) + Date + Duration + Certificate + Nudity + Violence + Profanity + 
+additive_model = lm(Rate ~ log(Votes) + Date + Duration + Certificate + Nudity + Violence + Profanity + 
               Alcohol + Frightening + Action + Adventure + Thriller + Crime + Drama + 
               Sci.Fi + Comedy + History + Fantasy + Horror + Mystery + Animation + 
               Family + Romance + Western + Musical + Biography + Music + War + 
@@ -102,6 +115,7 @@ initial_model = lm(Rate ~ log(Votes) + Date + Duration + Certificate + Nudity + 
 ```
 
 We defined a diagnostics helper function to easily determine if constraints are being satisfied. 
+
 ```{r}
 diagnostics = function(model, pcol = "grey", lcol = "dodgerblue", alpha = 0.05, plotit = TRUE, testit = TRUE) {
   output = list()
@@ -128,17 +142,18 @@ diagnostics = function(model, pcol = "grey", lcol = "dodgerblue", alpha = 0.05, 
 
 
 ```{r}
-initial_model_summary = summary(initial_model)
-diagnostics_result = diagnostics(initial_model)
+additive_model_summary = summary(additive_model)
+diagnostics_result = diagnostics(additive_model)
 ```
 
-The diagnostics for our initial additive model were lukewarm. The `Residuals vs Fitted` showed a slight, but discernible, funnel shape. The `Normal Q-Q` plot showed deviations from the diagonal line at tail end of the lower-quantiles. This indicated that the residuals are not perfectly normally distributed. The Shapiro-Wilk test corroborated this finding, with a p-value of `r diagnostics_result$p_val`, leading to the rejection of the null hypothesis of normality. Notably, the Adjusted R-Squared for this additive model was `r initial_model_summary$adj.r.squared`.
+The diagnostics for our additive model were lukewarm. The `Residuals vs Fitted` showed a slight, but discernible, funnel shape. The `Normal Q-Q` plot showed deviations from the diagonal line at tail end of the lower-quantiles. This indicated that the residuals are not perfectly normally distributed. The Shapiro-Wilk test corroborated this finding, with a p-value of `r diagnostics_result$p_val`, leading to the rejection of the null hypothesis of normality. Notably, the Adjusted R-Squared for this additive model was `r summary(additive_model)$adj.r.squared`.
 
 Given these results, we aimed to iteratively refine our model first by removing any influential points which might have impacted the fit of our initial model.
 
 ```{r}
-leverage = hatvalues(initial_model)
-cooks_distance = cooks.distance(initial_model)
+set.seed(1234)
+leverage = hatvalues(additive_model)
+cooks_distance = cooks.distance(additive_model)
 
 influential_points = which(cooks_distance > 4 / nrow(imdb_data))
 
@@ -149,12 +164,13 @@ model_without_influential_pts = lm(Rate ~ log(Votes) + Date + Duration + Certifi
 model_without_influential_pts_summary = summary(model_without_influential_pts)
 ```
 
-Removing influential points did not significantly change our diagnostic plots, and the Adjusted R-Squared of this new model was now `r model_without_influential_pts_summary$adjusted.r.squared`.
+Removing influential points did not significantly change our diagnostic plots, and the Adjusted R-Squared of this new model was now `r model_without_influential_pts_summary$adj.r.squared`.
 
 Continuing our exploration, we evaluated transformations of the response to improve normality of residuals and better meet linear regression assumptions. Ultimately, we found Box-cox transformation of our response variable to improve our model in these regards.
 
 ```{r}
 library(MASS)
+set.seed(1234)
 
 any(imdb_data_cleaned$Rate <= 0) # no shift needed if non-positive values
 
@@ -172,7 +188,7 @@ boxcox_transformed_model = lm(Rate_transformed ~ log(Votes) + Date + Duration + 
 boxcox_transformed_model_summary = summary(boxcox_transformed_model)
 ```
 
-The Boxcox transformation on the response variable seemed to have a pretty good impact on the diagnostics of our model. 
+The Boxcox transformation on the response variable seemed to have a decent impact on the diagnostics of our model. 
 
 We next reviewed variance inflation factors (VIFs) to check for multicollinearity issues and considered interaction terms where conceptually meaningful (e.g., between certain advisory categories and film genres).
 
@@ -180,11 +196,12 @@ We next reviewed variance inflation factors (VIFs) to check for multicollinearit
 car::vif(boxcox_transformed_model)
 ```
 
-From this, we decided that it might be worth dropping a feature which seemed to be contributing to collinearity -- namely `Certificate`. 
+From this, we decided that it might be worth dropping a feature which seemed to be contributing to collinearity -- namely `Certificate`.
 
 Additionally, we believed that the relationship between some of our predictor variables would be better modeled as interactions rather than just additively. For example, we believed that the feature of `Frightening` would be better suited when associated with the `Horror` genre. Additionally, we combined `Alcohol`, `Nudity`, `Violence`, and `Profanity` through interaction as we believed that this interaction could account for the `Certificate` feature which we removed due to collinearity issues.
 
 ```{r}
+set.seed(1234)
 interaction_model = lm(Rate_transformed ~ log(Votes) + Date + Duration + (Nudity + Violence + Profanity + Alcohol)^2 + Frightening:Horror + Action + Adventure + Thriller + 
                        Crime + Drama + Sci.Fi + Comedy + Fantasy + Horror + Mystery + 
                        Animation + Family + Romance + Western + Musical + Biography + Music + 
@@ -204,19 +221,76 @@ Throughout this process, we documented each step of the analysis. We emphasize t
 
 # Results
 
-TODO: Create a table of the results of our models. Might want to use some library for proper formatting/embedded plot images.
+Below you can find an assessment of the models we tried. The order of each section match our approach chronologically. Note that this is a subset of the models we tried as we added/removed predictors along the way as we experimented. This subset gives the best overall picture of our investigation and documents the results of major adjustments to our model.
 
-Below you can find an assessment of the models we tried. The order of the rows in this table match our approach chronologically.
+## Initial additive model
 
-| Model Description | Adjusted R-Squared | Sharp-Wilk P-value | Residuals vs Fitted | Q-Q Plot | 
-e.g.
-| simple additive   |   0.20             | sw pvalue          | plot image          | plot img |
+Adjusted R-Square: `r summary(initial_model)$adj.r.squared`
 
-Based on this, ultimately we landed on XYZ model. This isn't the perfect model, but we feel reasonably confident that this model could we used to predict ratings. 
+```{r}
+initial_model_diagnostics = diagnostics(initial_model)
+```
 
-To illustrate this, we compare our prediction ability from our starting model, to the model we ended with.
 
-# TODO: split data, compare prediction from initial additive model, to the last model. Maybe put results in an easy to read table?
+## Additive Model Results
+
+Adjusted R-Square: `r summary(additive_model)$adj.r.squared`
+
+```{r}
+additive_model_diagnostics = diagnostics(additive_model)
+```
+
+## Model without influential points
+
+Adjusted R-Square: `r summary(model_without_influential_pts)$adj.r.squared`
+
+```{r}
+model_without_influential_diagnostics = diagnostics(model_without_influential_pts)
+```
+
+
+## Model with Box-Cox transformation applied
+
+Adjusted R-Square: `r summary(boxcox_transformed_model)$adj.r.squared`
+
+```{r}
+box_cox_mdl_diagnostics = diagnostics(boxcox_transformed_model)
+```
+
+
+## Interaction Model (and remove variables to fix collinearity issues)
+
+Adjusted R-Square: `r summary(interaction_model)$adj.r.squared`
+
+```{r}
+interaction_model_diagnostics = diagnostics(interaction_model)
+```
+
+
+## Backward stepwise selection model
+
+Adjusted R-Square: `r summary(step_reduced_model)$adj.r.squared`
+
+```{r}
+step_reduced_model_diagnostics = diagnostics(step_reduced_model)
+```
+
+
+
+## Selecting a model
+
+TODO: Not sure which model to pick as our final model because it seems box-cox technical performs best at ~0.57, whereas the removing collinearity and adding interactions terms both perform at ~0.56. I've written the text below assuming that we are picking the stepwise selection model, but not sure if that's the right decision or not.
+
+Based on the results above, we ultimately landed on our model that used backward selection as it had the best adjusted R Squared value, least number of predictors, while also having the best diagnostic plots. Below, we have displayed the formula for our final regression model.
+
+```{r}
+summary(step_reduced_model)$call
+```
+
+This isn't a perfect model, but we feel reasonably confident that this model provides solid information regarding what factors impact a film's rating. Given that the data lacks some key informative predictors such as information regarding the cast/director of the movie, we believe that this model performs reasonably well compared to other models.
+
+To illustrate this, we compare our prediction ability from our starting model to the final model we chose.
+
 
 ```{R}
 set.seed(391993)
@@ -227,15 +301,21 @@ train_data = imdb_data_cleaned[train_index, ]
 test_data = imdb_data_cleaned[-train_index, ]
 
 # intial model trained, make sure to have the data only be pointing to train_data
-
+trained_intial_model = initial_model;
 # "final" model trained
+trained_final_model = step_reduced_model
 
 # predict for both
+predictions_initial = predict(trained_intial_model, newdata=test_data)
+predictions_final = predict(trained_final_model, newdata=test_data)
 
 # compare RMSEs
-
+expected = test_data$Rate_transformed
+rmse_value_initial_model = sqrt(mean((expected - predictions_initial)^2))
+rmse_value_final_model = sqrt(mean((expected - predictions_final)^2))
 ```
 
+The RMSE of our initial model was `r rmse_value_initial_model`, whereas the RMSE value of our final model is `r rmse_value_final_model` which demonstrates the improvement we achieved over the course of our investigation.
 
 # Discussion
 
